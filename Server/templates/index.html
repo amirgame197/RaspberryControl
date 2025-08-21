@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RaspberryPi Control Panel</title>
+    <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='images/favicon.ico') }}">
+    <script src="{{ url_for('static', filename='libs/socket.io.js') }}"></script>
+    <style>
+        @font-face {
+            font-family: 'MavenPro';
+            src: url('/static/fonts/MavenPro.ttf') format('truetype');
+        }
+        body {
+            font-family: 'MavenPro', Fallback, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+            -webkit-tap-highlight-color: transparent;
+        }
+        ::-webkit-scrollbar {
+            width: 10px;
+            height: 10px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0e0e0e; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #000000; 
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #000000; 
+        }
+        /* Dark Mode */
+        :root {
+            --bg-color: #111;
+            --text-color: #f4f4f4;
+            --button-bg: #333;
+            --button-color: #f4f4f4;
+            --section-bg: #222;
+            --section-border: #444;
+        }
+        .light-mode {
+            --bg-color: #f4f4f4;
+            --text-color: #333;
+            --button-bg: #ddd;
+            --button-color: #333;
+            --section-bg: #fff;
+            --section-border: #ddd;
+        }
+        .info { 
+            margin-bottom: 20px; 
+            background-color: var(--section-bg);
+            padding: 15px;
+            border-radius: 5px;
+            box-shadow: 0px 2px 5px rgba(0,0,0,0.2);
+            border: 1px solid var(--section-border);
+        }
+        h3 {
+            margin-top: 0;
+        }
+        .btn {
+            font-family: 'MavenPro', Fallback, sans-serif;
+            padding: 10px 20px;
+            margin: 5px;
+            border: none;
+            border-radius: 5px;
+            font-size: 1rem;
+            cursor: pointer;
+            background-color: var(--button-bg);
+            color: var(--button-color);
+            transition: background-color 0.3s;
+        }
+        .btn:hover {
+            background-color: #666;
+        }
+        .textarea:hover {
+            background-color: var(--button-bg);
+            cursor: auto;
+        }
+        .ssharea:hover {
+            background-color: var(--section-bg);
+            cursor: auto;
+        }
+        .ssharea {
+            font-family: monospace;
+        }
+        .btn-danger {
+            background-color: #d9534f;
+            color: #fff;
+        }
+        .section {
+            margin-bottom: 20px;
+            background-color: var(--section-bg);
+            padding: 20px;
+            border-radius: 8px;
+            border: 1px solid var(--section-border);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        .toggle-btn {
+            font-family: 'MavenPro', Fallback, sans-serif;
+            padding: 5px 10px;
+            background-color: var(--button-bg);
+            color: var(--button-color);
+            border: none;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+        pre {
+            white-space: pre-wrap;       /* Since CSS 2.1 */
+            white-space: -moz-pre-wrap;  /* Mozilla, since 1999 */
+            white-space: -pre-wrap;      /* Opera 4-6 */
+            white-space: -o-pre-wrap;    /* Opera 7 */
+            word-wrap: break-word;       /* Internet Explorer 5.5+ */
+        }
+    </style>    
+</head>
+<body>
+
+    <h1>RaspberryPi Control Panel</h1>
+    <h4 id="isconnected"><font color="#ad3737">No response from Pi. Retrying...</font></h4>
+    <br>
+    <div class="section">
+        <h3>SSH Terminal</h3>
+        <textarea readonly class="ssharea section btn" style="resize: none; outline: none; height: 300px; width: calc(100% - 50px);" id="ssh_commands">root@RaspberryPi:/# </textarea>
+        <textarea type="text" class="textarea btn" id="command_input" placeholder="Send a Command..." style="resize: none; outline: none; width: calc(100% - 175px);" rows="1" required></textarea>
+        <button class="btn btn-danger" style="float: right;" onclick="requestInterruptSSH()">CTRL+C</button>
+    </div>
+
+    <div class="section">
+        <h3>Disk Usage</h3>
+        <pre id="disk_usage">No signal.</pre>
+    </div>
+
+    <div class="section">
+        <h3>Core Status</h3>
+        <pre id="core_status">No signal.</pre>
+    </div>
+
+    <div class="section">
+        <h3>Network State</h3>
+        <button class="btn" onclick="requestNetworkState('ifconfig')">Request ifconfig</button>
+        <button class="btn" onclick="requestNetworkState('netstat')">Request netstat</button>
+        <button class="btn" onclick="requestNetworkState('ping')">Ping Server</button>
+        <pre id="network_state"></pre>
+    </div>
+
+    <div class="section">
+        <h3>Wi-Fi</h3>
+        <div class="section" style="width: 245px;">
+            <textarea type="text" class="textarea btn" id="wifi-ssid" placeholder="Wi-Fi SSID" style="resize: none; outline: none;" rows="1" required></textarea>
+            <textarea type="text" class="textarea btn" id="wifi-password" placeholder="Wi-Fi Password" style="-webkit-text-security: disc; resize: none; outline: none;" rows="1" required></textarea>
+            <button class="btn" style="margin: 5px 25%;" onclick="requestConnectWiFi()">Connect to Wi-Fi</button>
+        </div>
+        <pre id="wifi_state">No signal.</pre>
+        <button class="btn" onclick="requestWiFi()">Toggle Wi-Fi</button>
+        <button class="btn" onclick="requestWiFiClients()">Request Wi-Fi Clients</button>
+        <pre id="wifi_clients"></pre>
+    </div>
+
+    <div class="section">
+        <h3>Power</h3>
+        <button class="btn btn-danger" onclick="requestReboot()">Reboot</button>
+        <button class="btn btn-danger" onclick="requestShutdown()">Shutdown</button>
+        <pre id="power_control_result"></pre>
+    </div>
+    
+    <button class="toggle-btn" onclick="toggleDarkMode()">Dark/Light</button>
+
+    <script>
+        var socket = io();
+
+        socket.on('connect', function() {
+            console.log('Connected to server');
+        });
+
+        socket.on('pi_data_result', function(data) {
+            if(data.power_request) {document.getElementById('power_control_result').innerText = data.power_request};
+            if(data.wifi_clients) {document.getElementById('wifi_clients').innerText = data.wifi_clients};
+        });
+
+        socket.on('update', function(data) {
+            updateTimer();
+            document.getElementById('disk_usage').innerText = data.disk_usage;
+            document.getElementById('core_status').innerText = data.core_status;
+            document.getElementById('wifi_state').innerText = data.wifi_state;
+            document.getElementById('isconnected').innerHTML = '<font color="#32a852">RaspberryPi Operational.</font>';
+        });
+
+        socket.on('network_state', function(data) {
+            document.getElementById('network_state').innerText = data.state;
+        });
+
+        socket.on('cmd_result', function(data) {
+            document.getElementById('command_input').value = '';
+            if(document.getElementById('ssh_commands').value != data.result)
+            { document.getElementById('ssh_commands').value += data.result; }
+            document.getElementById('ssh_commands').scrollTop = document.getElementById('ssh_commands').scrollHeight;
+        });
+
+        //socket.on('disconnect', () => {
+        //    alert('You have been disconnected. Trying to reconnect...')
+        //});
+
+        //socket.on('reconnect', () => {
+        //    alert('You have been reconnected.')
+        //});
+
+        function requestNetworkState(type) {
+            socket.emit('request_network_state', { request_type: type });
+        }
+
+        function requestWiFi() {
+            socket.emit('request_wifi');
+        }
+
+        function requestWiFiClients() {
+            socket.emit('request_wifi_clients');
+        }
+
+        function requestConnectWiFi() {
+            if(!document.getElementById('wifi-ssid').value || !document.getElementById('wifi-password').value)
+                return
+            socket.emit('request_connect_wifi', { ssid: document.getElementById('wifi-ssid').value, password: document.getElementById('wifi-password').value });
+        }
+
+        function requestReboot() {
+            socket.emit('request_reboot');
+        }
+
+        function requestShutdown() {
+            socket.emit('request_shutdown');
+        }
+
+        function toggleDarkMode() {
+            if (document.body.classList.contains('light-mode')) {
+                document.body.classList.remove('light-mode');
+                document.cookie = "mode=dark;path=/";
+            } else {
+                document.body.classList.add('light-mode');
+                document.cookie = "mode=light;path=/";
+            }
+        }
+
+        document.getElementById('command_input').addEventListener('keydown', function(event) {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                socket.emit('request_send_command', { command: document.getElementById('command_input').value });
+            }
+        });
+
+        function requestInterruptSSH() {
+            socket.emit('request_ssh_interrupt');
+        }
+
+        window.onload = function() {
+            const cookies = document.cookie.split(';').map(cookie => cookie.trim());
+            const modeCookie = cookies.find(cookie => cookie.startsWith("mode="));
+
+            if (modeCookie && modeCookie.split('=')[1] === 'light') {
+                document.body.classList.add('light-mode');
+            } else {
+                document.body.classList.remove('light-mode');
+            }
+        }
+
+        let timer, lastUpdateTime;
+
+        const startTimer = () => {
+            lastUpdateTime = Date.now();
+            timer = setInterval(checkTimer, 1000);
+        };
+        
+        const updateTimer = () => {
+            lastUpdateTime = Date.now();
+        };
+        
+        const resetTimer = () => {
+            clearInterval(timer);
+            startTimer();
+        };
+        
+        const checkTimer = () => {
+            const timePassed = (Date.now() - lastUpdateTime) / 1000;
+            if (timePassed >= 30) {
+                socket.emit('refresh');
+                document.getElementById('isconnected').innerHTML = '<font color="#ad3737">No response from Pi. Retrying...</font>';
+                resetTimer();
+            }
+        };
+        
+        startTimer();
+        setTimeout(updateTimer, 5000);
+    </script>
+</body>
+</html>
